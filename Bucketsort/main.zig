@@ -1,4 +1,5 @@
 const std = @import("std");
+const expect = std.testing.expect;
 const allocator = std.heap.page_allocator;
 const bsort = @import("bucketsort.zig");
 
@@ -21,4 +22,25 @@ fn indexMax() u32 {
 
 fn indexConverter(item: u8) u32 {
     return item;
+}
+
+test "0要素のリスト" {
+    const list = [_]u8{};
+    const answer = try bsort.BucketSort(u8, indexMax, indexConverter).sort(allocator, &list);
+    defer allocator.free(answer);
+    try expect(@TypeOf(answer) == []u8);
+    try expect(answer.len == 0);
+}
+
+test "5要素のリスト" {
+    const list = [_]u8{ 3, 5, 1, 2, 4 };
+    const answer = try bsort.BucketSort(u8, indexMax, indexConverter).sort(allocator, &list);
+    defer allocator.free(answer);
+    try expect(@TypeOf(answer) == []u8);
+    try expect(answer.len == 5);
+    try expect(answer[0] == 1);
+    try expect(answer[1] == 2);
+    try expect(answer[2] == 3);
+    try expect(answer[3] == 4);
+    try expect(answer[4] == 5);
 }
