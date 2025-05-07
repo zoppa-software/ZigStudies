@@ -9,8 +9,9 @@ pub fn main() !void {
     std.debug.print("開始 = {any}\n", .{list});
 
     // バケットソートを実行
-    const answer = try bsort.BucketSort(u8, indexMax, indexConverter).sort(allocator, &list);
-    defer allocator.free(answer);
+    var sorter = bsort.BucketSort(u8, indexMax, indexConverter).init();
+    const answer = try sorter.sort(allocator, &list);
+    defer sorter.deinit(allocator);
 
     // ソート後の配列を表示
     std.debug.print("終了 = {any}\n", .{answer});
@@ -26,21 +27,22 @@ fn indexConverter(item: u8) u32 {
 
 test "0要素のリスト" {
     const list = [_]u8{};
-    const answer = try bsort.BucketSort(u8, indexMax, indexConverter).sort(allocator, &list);
-    defer allocator.free(answer);
+
+    var sorter = bsort.BucketSort(u8, indexMax, indexConverter).init();
+    const answer = try sorter.sort(allocator, &list);
+    defer sorter.deinit(allocator);
+
     try expect(@TypeOf(answer) == []u8);
     try expect(answer.len == 0);
 }
 
 test "5要素のリスト" {
     const list = [_]u8{ 3, 5, 1, 2, 4 };
-    const answer = try bsort.BucketSort(u8, indexMax, indexConverter).sort(allocator, &list);
-    defer allocator.free(answer);
+
+    var sorter = bsort.BucketSort(u8, indexMax, indexConverter).init();
+    const answer = try sorter.sort(allocator, &list);
+    defer sorter.deinit(allocator);
+
     try expect(@TypeOf(answer) == []u8);
-    try expect(answer.len == 5);
-    try expect(answer[0] == 1);
-    try expect(answer[1] == 2);
-    try expect(answer[2] == 3);
-    try expect(answer[3] == 4);
-    try expect(answer[4] == 5);
+    try expect(std.mem.eql(u8, answer, &[_]u8{ 1, 2, 3, 4, 5 }));
 }

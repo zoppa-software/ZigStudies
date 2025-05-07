@@ -12,11 +12,20 @@ pub fn BucketSort(
     comptime convertIndex: fn (T) u32,
 ) type {
     return struct {
+        /// ソート結果
+        result: ?[]T = null,
+
         /// インスタンスの参照
         const Self = @This();
 
+        /// インスタンスを初期化します
+        pub fn init() Self {
+            return Self{ .result = null };
+        }
+
         /// ソートを実行します
         pub fn sort(
+            self: *Self,
             allocator: std.mem.Allocator,
             list: []const T,
         ) ![]T {
@@ -26,7 +35,7 @@ pub fn BucketSort(
             }
 
             // 戻り値のリストを作成します
-            const result = try allocator.alloc(T, list.len);
+            var tmp = try allocator.alloc(T, list.len);
             const indexMax = getIndexMax();
 
             // バケットのインデックスごとのカウンタを作成します
@@ -57,10 +66,19 @@ pub fn BucketSort(
             // 累積したカウンタを使って、ソートされたリストを作成します
             for (list) |item| {
                 const index = convertIndex(item) - 1;
-                result[stepCounter[index]] = item;
+                tmp[stepCounter[index]] = item;
                 stepCounter[index] += 1;
             }
-            return result;
+            self.result = tmp;
+            return tmp;
+        }
+
+        /// ソート結果を解放します
+        /// これは、sort()メソッドを呼び出した後に呼び出す必要があります。
+        pub fn deinit(self: Self, allocator: std.mem.Allocator) void {
+            if (self.result) |result| {
+                allocator.free(result);
+            }
         }
     };
 }
