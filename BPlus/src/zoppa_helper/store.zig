@@ -39,11 +39,22 @@ pub fn Store(comptime T: type, comptime size: comptime_int) type {
 
         /// ストアを破棄します。
         pub fn deinit(self: *Self) void {
+            self.deleted_count = 0;
             self.allocator.free(self.deleted);
             for (self.instances) |item| {
                 self.allocator.free(item[0..size]);
             }
             self.allocator.free(self.instances);
+        }
+
+        /// ストアをクリアします。
+        pub fn clear(self: *Self) !void {
+            self.deinit();
+            self.deleted = try self.alloc.alloc(*T, size);
+            self.instances = try self.alloc.alloc([*]T, 0);
+            self.createCache() catch |err| {
+                return err;
+            };
         }
 
         /// キャッシュを作成します。

@@ -20,10 +20,18 @@ pub fn binary_search_ge(comptime T: type, arr: []const T, target: T, compare: fn
         }
     }
 
-    if (compare(@TypeOf(T), arr[@intCast(left)], target) > 0) {
-        return left - 1;
+    if (compare(@TypeOf(T), arr[@intCast(left)], target) < 0) {
+        return left + 1;
     }
     return left;
+}
+
+/// 以下の要素のバイナリサーチを行う
+pub fn binary_search_lt(comptime T: type, arr: []const T, target: T, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32) !i64 {
+    const res = binary_search_ge(T, arr, target, compare) catch |err| {
+        return err;
+    };
+    return res - 1;
 }
 
 /// 以下の要素のバイナリサーチを行う
@@ -45,10 +53,18 @@ pub fn binary_search_le(comptime T: type, arr: []const T, target: T, compare: fn
         }
     }
 
-    if (compare(@TypeOf(T), arr[@intCast(right)], target) < 0) {
-        return right + 1;
+    if (compare(@TypeOf(T), arr[@intCast(right)], target) > 0) {
+        return right - 1;
     }
     return right;
+}
+
+/// 以下の要素のバイナリサーチを行う
+pub fn binary_search_gt(comptime T: type, arr: []const T, target: T, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32) !i64 {
+    const res = binary_search_le(T, arr, target, compare) catch |err| {
+        return err;
+    };
+    return res + 1;
 }
 
 /// テスト用の比較関数
@@ -82,26 +98,53 @@ test "binary_search_ge test" {
 
     const arr2 = [_]u32{ 3, 3, 4, 6, 8 };
     const index20 = try binary_search_ge(u32, arr2[0..], 0, compare_fn);
-    try std.testing.expectEqual(index20, -1);
+    try std.testing.expectEqual(index20, 0);
     const index21 = try binary_search_ge(u32, arr2[0..], 1, compare_fn);
-    try std.testing.expectEqual(index21, -1);
+    try std.testing.expectEqual(index21, 0);
     const index22 = try binary_search_ge(u32, arr2[0..], 2, compare_fn);
-    try std.testing.expectEqual(index22, -1);
+    try std.testing.expectEqual(index22, 0);
     const index23 = try binary_search_ge(u32, arr2[0..], 3, compare_fn);
     try std.testing.expectEqual(index23, 0);
     const index24 = try binary_search_ge(u32, arr2[0..], 4, compare_fn);
     try std.testing.expectEqual(index24, 2);
     const index25 = try binary_search_ge(u32, arr2[0..], 5, compare_fn);
-    try std.testing.expectEqual(index25, 2);
+    try std.testing.expectEqual(index25, 3);
     const index26 = try binary_search_ge(u32, arr2[0..], 6, compare_fn);
     try std.testing.expectEqual(index26, 3);
     const index27 = try binary_search_ge(u32, arr2[0..], 7, compare_fn);
-    try std.testing.expectEqual(index27, 3);
+    try std.testing.expectEqual(index27, 4);
     const index28 = try binary_search_ge(u32, arr2[0..], 8, compare_fn);
     try std.testing.expectEqual(index28, 4);
     const index29 = try binary_search_ge(u32, arr2[0..], 9, compare_fn);
-    try std.testing.expectEqual(index29, 4);
+    try std.testing.expectEqual(index29, 5);
     const index30 = try binary_search_ge(u32, arr2[0..], 10, compare_fn);
+    try std.testing.expectEqual(index30, 5);
+}
+
+// binary_search_ltのテスト
+test "binary_search_lt test" {
+    const arr2 = [_]u32{ 3, 3, 4, 6, 8 };
+    const index20 = try binary_search_lt(u32, arr2[0..], 0, compare_fn);
+    try std.testing.expectEqual(index20, -1);
+    const index21 = try binary_search_lt(u32, arr2[0..], 1, compare_fn);
+    try std.testing.expectEqual(index21, -1);
+    const index22 = try binary_search_lt(u32, arr2[0..], 2, compare_fn);
+    try std.testing.expectEqual(index22, -1);
+    const index23 = try binary_search_lt(u32, arr2[0..], 3, compare_fn);
+    try std.testing.expectEqual(index23, -1);
+    const index24 = try binary_search_lt(u32, arr2[0..], 4, compare_fn);
+    try std.testing.expectEqual(index24, 1);
+    const index25 = try binary_search_lt(u32, arr2[0..], 5, compare_fn);
+    try std.testing.expectEqual(index25, 2);
+    const index26 = try binary_search_lt(u32, arr2[0..], 6, compare_fn);
+    try std.testing.expectEqual(index26, 2);
+    const index27 = try binary_search_lt(u32, arr2[0..], 7, compare_fn);
+    try std.testing.expectEqual(index27, 3);
+    const index28 = try binary_search_lt(u32, arr2[0..], 8, compare_fn);
+    try std.testing.expectEqual(index28, 3);
+    const index29 = try binary_search_lt(u32, arr2[0..], 9, compare_fn);
+    try std.testing.expectEqual(index29, 4);
+    const index30 = try binary_search_lt(u32, arr2[0..], 10, compare_fn);
     try std.testing.expectEqual(index30, 4);
 }
 
@@ -125,25 +168,52 @@ test "binary_search_le test" {
 
     const arr2 = [_]u32{ 3, 3, 4, 6, 8 };
     const index20 = try binary_search_le(u32, arr2[0..], 0, compare_fn);
-    try std.testing.expectEqual(index20, 0);
+    try std.testing.expectEqual(index20, -1);
     const index21 = try binary_search_le(u32, arr2[0..], 1, compare_fn);
-    try std.testing.expectEqual(index21, 0);
+    try std.testing.expectEqual(index21, -1);
     const index22 = try binary_search_le(u32, arr2[0..], 2, compare_fn);
-    try std.testing.expectEqual(index22, 0);
+    try std.testing.expectEqual(index22, -1);
     const index23 = try binary_search_le(u32, arr2[0..], 3, compare_fn);
     try std.testing.expectEqual(index23, 1);
     const index24 = try binary_search_le(u32, arr2[0..], 4, compare_fn);
     try std.testing.expectEqual(index24, 2);
     const index25 = try binary_search_le(u32, arr2[0..], 5, compare_fn);
-    try std.testing.expectEqual(index25, 3);
+    try std.testing.expectEqual(index25, 2);
     const index26 = try binary_search_le(u32, arr2[0..], 6, compare_fn);
     try std.testing.expectEqual(index26, 3);
     const index27 = try binary_search_le(u32, arr2[0..], 7, compare_fn);
-    try std.testing.expectEqual(index27, 4);
+    try std.testing.expectEqual(index27, 3);
     const index28 = try binary_search_le(u32, arr2[0..], 8, compare_fn);
     try std.testing.expectEqual(index28, 4);
     const index29 = try binary_search_le(u32, arr2[0..], 9, compare_fn);
-    try std.testing.expectEqual(index29, 5);
+    try std.testing.expectEqual(index29, 4);
     const index30 = try binary_search_le(u32, arr2[0..], 10, compare_fn);
+    try std.testing.expectEqual(index30, 4);
+}
+
+// binary_search_gtのテスト
+test "binary_search_gt test" {
+    const arr2 = [_]u32{ 3, 3, 4, 6, 8 };
+    const index20 = try binary_search_gt(u32, arr2[0..], 0, compare_fn);
+    try std.testing.expectEqual(index20, 0);
+    const index21 = try binary_search_gt(u32, arr2[0..], 1, compare_fn);
+    try std.testing.expectEqual(index21, 0);
+    const index22 = try binary_search_gt(u32, arr2[0..], 2, compare_fn);
+    try std.testing.expectEqual(index22, 0);
+    const index23 = try binary_search_gt(u32, arr2[0..], 3, compare_fn);
+    try std.testing.expectEqual(index23, 2);
+    const index24 = try binary_search_gt(u32, arr2[0..], 4, compare_fn);
+    try std.testing.expectEqual(index24, 3);
+    const index25 = try binary_search_gt(u32, arr2[0..], 5, compare_fn);
+    try std.testing.expectEqual(index25, 3);
+    const index26 = try binary_search_gt(u32, arr2[0..], 6, compare_fn);
+    try std.testing.expectEqual(index26, 4);
+    const index27 = try binary_search_gt(u32, arr2[0..], 7, compare_fn);
+    try std.testing.expectEqual(index27, 4);
+    const index28 = try binary_search_gt(u32, arr2[0..], 8, compare_fn);
+    try std.testing.expectEqual(index28, 5);
+    const index29 = try binary_search_gt(u32, arr2[0..], 9, compare_fn);
+    try std.testing.expectEqual(index29, 5);
+    const index30 = try binary_search_gt(u32, arr2[0..], 10, compare_fn);
     try std.testing.expectEqual(index30, 5);
 }

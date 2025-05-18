@@ -1,8 +1,6 @@
 //! By convention, main.zig is where your main function lives in the case that
 //! you are building an executable. If you are making a library, the convention
 //! is to delete this file and start with root.zig instead.
-const store = @import("store.zig");
-const bserach = @import("binary_search.zig");
 
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
@@ -21,8 +19,9 @@ pub fn main() !void {
 }
 
 test {
-    _ = @import("store.zig");
-    _ = @import("binary_search.zig");
+    _ = @import("zoppa_helper/store.zig");
+    _ = @import("zoppa_helper/binary_search.zig");
+    _ = @import("zoppa_helper/bplus_tree.zig");
 }
 
 test "simple test" {
