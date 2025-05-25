@@ -9,10 +9,10 @@ pub fn Store(comptime T: type, comptime size: comptime_int) type {
         const Self = @This();
 
         // 削除済みリスト
-        deleted: []*T,
+        free_list: []*T,
 
         // 削除済み数
-        deleted_count: usize,
+        free_count: usize,
 
         // データの格納先
         instances: [][*]T,
@@ -23,8 +23,8 @@ pub fn Store(comptime T: type, comptime size: comptime_int) type {
         /// ストアを初期化します。
         pub fn init(alloc: Allocator) !Self {
             var res = Self{
-                .deleted_count = 0,
-                .deleted = try alloc.alloc(*T, size),
+                .free_count = 0,
+                .free_list = try alloc.alloc(*T, size),
                 .instances = try alloc.alloc([*]T, 0),
                 .allocator = alloc,
             };
@@ -39,8 +39,8 @@ pub fn Store(comptime T: type, comptime size: comptime_int) type {
 
         /// ストアを破棄します。
         pub fn deinit(self: *Self) void {
-            self.deleted_count = 0;
-            self.allocator.free(self.deleted);
+            self.free_count = 0;
+            self.allocator.free(self.free_list);
             for (self.instances) |item| {
                 self.allocator.free(item[0..size]);
             }
@@ -49,9 +49,16 @@ pub fn Store(comptime T: type, comptime size: comptime_int) type {
 
         /// ストアをクリアします。
         pub fn clear(self: *Self) !void {
-            self.deinit();
-            self.deleted = try self.alloc.alloc(*T, size);
-            self.instances = try self.alloc.alloc([*]T, 0);
+            self.free_count = 0;
+            self.allocator.free(self.free_list);
+            self.free_list = try self.allocator.alloc(*T, size);
+
+            for (self.instances) |item| {
+                self.allocator.free(item[0..size]);
+            }
+            self.allocator.free(self.instances);
+            self.instances = try self.allocator.alloc([*]T, 0);
+
             self.createCache() catch |err| {
                 return err;
             };
@@ -61,7 +68,7 @@ pub fn Store(comptime T: type, comptime size: comptime_int) type {
         fn createCache(self: *Self) !void {
             // 実体を保持する領域を確保する
             var new_instances = try self.allocator.alloc([*]T, self.instances.len + 1);
-            @memcpy(new_instances[0..self.instances.len], self.instances);
+            std.mem.copyForwards([*]T, new_instances[0..self.instances.len], self.instances);
 
             const tmp = try self.allocator.alloc(T, size);
             new_instances[new_instances.len - 1] = tmp.ptr;
@@ -69,39 +76,39 @@ pub fn Store(comptime T: type, comptime size: comptime_int) type {
             self.instances = new_instances;
 
             // サイズを変更する
-            self.deleted_count = size;
+            self.free_count = size;
             for (tmp, 0..) |*item, i| {
-                self.deleted[i] = item;
+                self.free_list[i] = item;
             }
         }
 
         /// ストアからオブジェクトを取得します。
         pub fn get(self: *Self) !*T {
             // 削除済みリストが空の場合は、キャッシュを作成する
-            if (self.deleted_count <= 0) {
+            if (self.free_count <= 0) {
                 self.createCache() catch |err| {
                     return err;
                 };
             }
 
             // 削除済みリストから取得する
-            const item = self.deleted[self.deleted_count - 1];
-            self.deleted_count -= 1;
+            const item = self.free_list[self.free_count - 1];
+            self.free_count -= 1;
             return item;
         }
 
         /// ストアにオブジェクトを返却します。
         pub fn put(self: *Self, item: *T) !void {
-            if (self.deleted_count >= self.deleted.len) {
+            if (self.free_count >= self.free_list.len) {
                 // 削除済みリストが満杯の場合は、リストを拡張する
-                const want = (self.instances.len * size - self.deleted.len) / 2;
-                const new_deleted = try self.allocator.alloc(*T, self.deleted.len + if (want > size) want else size);
-                @memcpy(new_deleted[0..self.deleted.len], self.deleted);
-                self.allocator.free(self.deleted);
-                self.deleted = new_deleted;
+                const want = (self.instances.len * size - self.free_list.len) / 2;
+                const new_deleted = try self.allocator.alloc(*T, self.free_list.len + if (want > size) want else size);
+                std.mem.copyForwards(*T, new_deleted[0..self.free_list.len], self.free_list);
+                self.allocator.free(self.free_list);
+                self.free_list = new_deleted;
             }
-            self.deleted[self.deleted_count] = item;
-            self.deleted_count += 1;
+            self.free_list[self.free_count] = item;
+            self.free_count += 1;
         }
     };
 }
@@ -113,7 +120,20 @@ test "Store init" {
     defer store.deinit();
 
     // ストアの初期化が成功したことを確認する
-    try testing.expect(store.deleted_count == 10);
+    try testing.expect(store.free_count == 10);
+}
+
+// ストアをクリアするテスト
+test "Store clear" {
+    const allocator = std.testing.allocator;
+    var store = try Store(i32, 2).init(allocator);
+    defer store.deinit();
+
+    // ストアをクリアする
+    try store.clear();
+
+    // ストアの状態を確認する
+    try testing.expect(store.free_count == 2);
 }
 
 // ストアからオブジェクトを取得するテスト
@@ -125,13 +145,13 @@ test "Store get" {
     // ストアからオブジェクトを取得する
     // ストアからオブジェクトを取得した後の状態を確認する
     _ = try store.get();
-    try testing.expect(store.deleted_count == 1);
+    try testing.expect(store.free_count == 1);
 
     _ = try store.get();
-    try testing.expect(store.deleted_count == 0);
+    try testing.expect(store.free_count == 0);
 
     _ = try store.get();
-    try testing.expect(store.deleted_count == 1);
+    try testing.expect(store.free_count == 1);
 }
 
 // ストアにオブジェクトを返却するテスト
@@ -163,5 +183,5 @@ test "Store put" {
     try store.put(item9);
 
     // ストアにオブジェクトを返却した後の状態を確認する
-    try testing.expect(store.deleted_count == 9);
+    try testing.expect(store.free_count == 9);
 }

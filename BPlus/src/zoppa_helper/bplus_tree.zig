@@ -10,7 +10,7 @@ const expect = std.testing.expect;
 /// データベースやファイルシステムなどの大規模なデータセットを効率的に管理するために使用されるデータ構造です。
 /// B木の変種であり、すべての値がリーフノードに格納されることを除いて、B木と同じ特性を持っています。
 /// データの挿入、削除、検索を効率的に行うことができるため、大規模なデータセットを扱うアプリケーションに適しています。
-pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32) type {
+pub fn BPlusTree(comptime T: type, compare: fn (lhs: T, rhs: T) i32) type {
     // ブロックサイズ
     const block_size: comptime_int = 8;
 
@@ -43,10 +43,10 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
             head_leaf: *BLeaf,
 
             /// 枝要素を初期化します。
-            pub fn init(self: *@This(), left_value: BParts, right_vale: BParts) void {
+            pub fn init(self: *@This(), left_value: BParts, right_value: BParts) void {
                 self.count = 2;
                 self.value[0] = left_value;
-                self.value[1] = right_vale;
+                self.value[1] = right_value;
                 self.traverseLeaf();
             }
 
@@ -81,20 +81,17 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
 
             /// 次の要素を取得します。
             pub fn next(self: *Iterator) ?T {
-                if (self.leaf) |leaf| {
-                    if (self.index >= leaf.count) {
+                while (self.leaf) |leaf| {
+                    if (self.index < leaf.count) {
+                        const value = leaf.value[self.index];
+                        self.index += 1;
+                        return value;
+                    } else {
                         self.leaf = leaf.next;
                         self.index = 0;
                     }
                 }
-
-                return if (self.leaf) |leaf| {
-                    const value = leaf.value[self.index];
-                    self.index += 1;
-                    return value;
-                } else {
-                    return null;
-                };
+                return null;
             }
         };
 
@@ -136,7 +133,7 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
         }
 
         /// B+木コレクションを構築します。
-        pub fn initAndRegist(alloc: Allocator, source_collection: *[]T) !Self {
+        pub fn initAndRegister(alloc: Allocator, source_collection: *[]T) !Self {
             var leaf_store = try store.Store(BLeaf, 32).init(alloc);
             var res = Self{
                 .count = 0,
@@ -151,7 +148,7 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
             // 元のコレクションの要素をB+木に登録する
             res.start_leaf.init();
             for (source_collection.*) |value| {
-                try res.local_add(value);
+                try res.add(value);
             }
             return res;
         }
@@ -172,12 +169,12 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
             // ルートノードと開始葉要素を初期化する
             self.count = 0;
             self.root_branch = null;
-            self.start_leaf = self.leaf_store.get();
+            self.start_leaf = try self.leaf_store.get();
             self.start_leaf.init();
         }
 
         /// 先頭要素で比較します。
-        fn compare_parts(_: type, lhs: BParts, rhs: BParts) i32 {
+        fn compare_parts(lhs: BParts, rhs: BParts) i32 {
             const left_value = switch (lhs) {
                 .leaf => |lf| lf.value[0],
                 .branch => |rt| rt.head_leaf.value[0],
@@ -188,7 +185,7 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
                 .branch => |rt| rt.head_leaf.value[0],
                 .value => |v| v.*,
             };
-            return compare(T, left_value, right_value);
+            return compare(left_value, right_value);
         }
 
         /// B+木コレクションに要素を追加します。
@@ -224,7 +221,7 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
                 return null;
             } else {
                 // バイナリサーチを使用して、値を挿入する位置を見つける
-                const insert = try bsearch.binary_search_gt(T, leaf.value[0..leaf.count], value, compare);
+                const insert = bsearch.binary_search_gt(T, leaf.value[0..leaf.count], value, compare);
                 const index: usize = if (insert < 0) 0 else @intCast(insert);
 
                 if (leaf.count < bucket_size) {
@@ -252,7 +249,7 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
         /// 枝要素に値を追加します。
         fn add_branch(self: *Self, branch: *BBranch, value: T) !?BParts {
             // バイナリサーチを使用して、値を挿入する位置を見つける
-            const insert = try bsearch.binary_search_le(BParts, branch.value[0..branch.count], .{ .value = &value }, compare_parts);
+            const insert = bsearch.binary_search_le(BParts, branch.value[0..branch.count], .{ .value = &value }, compare_parts);
             const index: usize = if (insert < 0) 0 else @intCast(insert);
 
             // 挿入位置に値を挿入する
@@ -384,7 +381,8 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
         /// B+木コレクションの葉から要素を削除します（内部用）
         fn remove_leaf(self: *Self, leaf: *BLeaf, value: T) !bool {
             // バイナリサーチを使用して、値を削除する位置を見つける
-            const index: usize = @intCast(try bsearch.binary_search_le(T, leaf.value[0..leaf.count], value, compare));
+            const find = bsearch.binary_search_le(T, leaf.value[0..leaf.count], value, compare);
+            const index: usize = if (find < 0) 0 else @intCast(find);
 
             if (index < leaf.count and leaf.value[index] == value) {
                 // 値が見つかった場合、削除する
@@ -404,27 +402,25 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
         /// B+木コレクションの枝から要素を削除します（内部用）
         fn remove_branch(self: *Self, branch: *BBranch, value: T) !bool {
             // バイナリサーチを使用して、値を削除する位置を見つける
-            var i = try bsearch.binary_search_le(BParts, branch.value[0..branch.count], .{ .value = &value }, compare_parts);
+            var i = bsearch.binary_search_le(BParts, branch.value[0..branch.count], .{ .value = &value }, compare_parts);
             while (i >= 0) : (i -= 1) {
-                if (i >= 0) {
-                    // 参照位置を取得する
-                    const index: usize = @intCast(i);
+                // 参照位置を取得する
+                const index: usize = @intCast(i);
 
-                    // 葉、枝要素から値を削除する
-                    const removed = switch (branch.value[@intCast(index)]) {
-                        .leaf => |lf| try self.remove_leaf(lf, value),
-                        .branch => |brh| try self.remove_branch(brh, value),
+                // 葉、枝要素から値を削除する
+                const removed = switch (branch.value[@intCast(index)]) {
+                    .leaf => |lf| try self.remove_leaf(lf, value),
+                    .branch => |brh| try self.remove_branch(brh, value),
+                    .value => unreachable,
+                };
+
+                // 削除された場合、枝要素をマージする
+                if (removed) {
+                    return switch (branch.value[0]) {
+                        .leaf => self.balance_leaf(branch, index),
+                        .branch => self.balance_branch(branch, index),
                         .value => unreachable,
                     };
-
-                    // 削除された場合、枝要素をマージする
-                    if (removed) {
-                        return switch (branch.value[0]) {
-                            .leaf => self.balance_leaf(branch, index),
-                            .branch => self.balance_branch(branch, index),
-                            .value => unreachable,
-                        };
-                    }
                 }
             }
             return false;
@@ -441,17 +437,17 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
                     return false;
                 } else if (index > 0) {
                     return blk: {
-                        shortcut_leaf(branch.value[index - 1].leaf, branch.value[index].leaf);
+                        bypass_leaf(branch.value[index - 1].leaf, branch.value[index].leaf);
                         const rem = branch.value[index].leaf;
-                        const res = marge_parts(BLeaf, branch, index - 1, branch.value[index - 1].leaf, branch.value[index].leaf);
+                        const res = merge_parts(BLeaf, branch, index - 1, branch.value[index - 1].leaf, branch.value[index].leaf);
                         try self.leaf_store.put(rem);
                         break :blk res;
                     };
                 } else if (index < branch.count - 1) {
                     return blk: {
-                        shortcut_leaf(branch.value[index].leaf, branch.value[index + 1].leaf);
+                        bypass_leaf(branch.value[index].leaf, branch.value[index + 1].leaf);
                         const rem = branch.value[index + 1].leaf;
-                        const res = marge_parts(BLeaf, branch, index, branch.value[index].leaf, branch.value[index + 1].leaf);
+                        const res = merge_parts(BLeaf, branch, index, branch.value[index].leaf, branch.value[index + 1].leaf);
                         try self.leaf_store.put(rem);
                         break :blk res;
                     };
@@ -472,14 +468,14 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
                 } else if (index > 0) {
                     return blk: {
                         const rem = branch.value[index].branch;
-                        const res = marge_parts(BBranch, branch, index - 1, branch.value[index - 1].branch, branch.value[index].branch);
+                        const res = merge_parts(BBranch, branch, index - 1, branch.value[index - 1].branch, branch.value[index].branch);
                         try self.branch_store.put(rem);
                         break :blk res;
                     };
                 } else if (index < branch.count - 1) {
                     return blk: {
                         const rem = branch.value[index + 1].branch;
-                        const res = marge_parts(BBranch, branch, index, branch.value[index].branch, branch.value[index + 1].branch);
+                        const res = merge_parts(BBranch, branch, index, branch.value[index].branch, branch.value[index + 1].branch);
                         try self.branch_store.put(rem);
                         break :blk res;
                     };
@@ -490,15 +486,15 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
 
         /// 葉要素を二分割します。
         fn division_leaf(left: *BLeaf, right: *BLeaf) void {
-            var marged = Concat(BLeaf, T).init(left, right);
-            marged.division(left, right);
+            var merged = Concat(BLeaf, T).init(left, right);
+            merged.division(left, right);
         }
 
         /// 枝要素を二分割します。
         fn division_branch(left: *BBranch, right: *BBranch) void {
             // 枝を結合し、分割
-            var marged = Concat(BBranch, BParts).init(left, right);
-            marged.division(left, right);
+            var merged = Concat(BBranch, BParts).init(left, right);
+            merged.division(left, right);
 
             // 検索キー参照変更
             right.traverseLeaf();
@@ -550,7 +546,7 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
         }
 
         /// 葉要素の右側をショートカットします。
-        fn shortcut_leaf(left: *BLeaf, right: *BLeaf) void {
+        fn bypass_leaf(left: *BLeaf, right: *BLeaf) void {
             left.next = right.next;
             if (right.next) |next| {
                 next.prev = left;
@@ -558,7 +554,7 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
         }
 
         /// 要素を結合します。
-        fn marge_parts(comptime NT: type, node_branch: *BBranch, index: usize, left: *NT, right: *NT) bool {
+        fn merge_parts(comptime NT: type, node_branch: *BBranch, index: usize, left: *NT, right: *NT) bool {
             // 前の葉に集約
             for (0..right.count, left.count..) |i, j| {
                 left.value[j] = right.value[i];
@@ -586,7 +582,7 @@ pub fn BPlusTree(comptime T: type, compare: fn (@TypeOf(T), lhs: T, rhs: T) i32)
 }
 
 /// テスト用の比較関数
-fn compare_fn(comptime T: type, lhs: T, rhs: T) i32 {
+fn compare_fn(lhs: i32, rhs: i32) i32 {
     if (lhs < rhs) {
         return -1;
     } else if (lhs > rhs) {
