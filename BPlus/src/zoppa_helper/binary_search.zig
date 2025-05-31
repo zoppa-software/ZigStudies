@@ -5,24 +5,18 @@ const testing = std.testing;
 pub fn binary_search_ge(comptime T: type, arr: []const T, target: T, compare: fn (lhs: T, rhs: T) i32) isize {
     if (arr.len == 0) return 1;
     var left: isize = 0;
-    var right: isize = @intCast(arr.len - 1);
+    var right: isize = @intCast(arr.len);
 
     while (left < right) {
         const mid = left + @divFloor(right - left, 2);
 
         // 比較関数を使用して、ターゲットと中間値を比較
         const cmp = compare(arr[@intCast(mid)], target);
-        if (cmp == 0) {
+        if (cmp >= 0) {
             right = mid;
-        } else if (cmp < 0) {
-            left = mid + 1;
         } else {
-            right = mid - 1;
+            left = mid + 1;
         }
-    }
-
-    if (compare(arr[@intCast(left)], target) < 0) {
-        return left + 1;
     }
     return left;
 }
@@ -36,7 +30,7 @@ pub fn binary_search_lt(comptime T: type, arr: []const T, target: T, compare: fn
 /// 以下の要素のバイナリサーチを行う
 pub fn binary_search_le(comptime T: type, arr: []const T, target: T, compare: fn (lhs: T, rhs: T) i32) isize {
     if (arr.len == 0) return -1;
-    var left: isize = 0;
+    var left: isize = -1;
     var right: isize = @intCast(arr.len - 1);
 
     while (left < right) {
@@ -44,17 +38,11 @@ pub fn binary_search_le(comptime T: type, arr: []const T, target: T, compare: fn
 
         // 比較関数を使用して、ターゲットと中間値を比較
         const cmp = compare(arr[@intCast(mid)], target);
-        if (cmp == 0) {
+        if (cmp <= 0) {
             left = mid;
-        } else if (cmp < 0) {
-            left = mid + 1;
         } else {
             right = mid - 1;
         }
-    }
-
-    if (compare(arr[@intCast(right)], target) > 0) {
-        return right - 1;
     }
     return right;
 }
